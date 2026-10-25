@@ -1212,7 +1212,7 @@ function rqSync(){
 }
 
 const RQ_MSG = {
-  pending: "your request is pending. You can still edit or cancel it for now.",
+  pending: "your request is pending. You can edit or cancel it until the barangay staff starts reviewing it.",
   processing: "your request is now being reviewed by the barangay staff. It can no longer be edited or cancelled.",
   confirmed: "your request has been confirmed by the barangay staff and is being prepared.",
   completed: "your request is ready for pickup. Please pick it up in person."
@@ -1318,7 +1318,7 @@ async function rqSubmit(){
     rq.editId = null; rqClearForm(); rqSetMode();
     err.style.color = "var(--accent)";
     err.textContent = editing ? "Changes saved. The barangay staff will review your updated request."
-                              : "Request submitted. Status: Pending. You can still edit or cancel it for a few minutes, then the barangay staff will start reviewing it.";
+                              : "Request submitted. Status: Pending. You can edit or cancel it until the barangay staff starts reviewing it.";
     rqLoadList();
   } catch(e){
     err.textContent = "Could not reach the server.";
