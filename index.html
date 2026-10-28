@@ -434,6 +434,10 @@
       </div>
       <h2 class="sec-title">My Requests</h2>
       <p class="sub" style="margin:-4px 0 10px; text-align:center;">Completed requests are removed automatically after 3 days.</p>
+      <div style="display:flex; justify-content:center; align-items:center; gap:10px; margin:0 0 10px;">
+        <button id="rqRefreshBtn" class="secondary" style="width:auto; margin:0; padding:7px 14px; font-size:.8rem;" onclick="rqRefresh()">Refresh</button>
+        <span class="sub" id="rqUpdated" style="margin:0; font-size:.72rem;"></span>
+      </div>
       <div class="panel" id="rqList"></div>
     </div>
   </div>
@@ -1253,12 +1257,37 @@ function rqRenderNotes(list){
   }).join("");
 }
 
+let rqLastLoad = 0, rqAutoTimer = null;
+
+async function rqRefresh(){
+  if(!rq.token) return;
+  const btn = rqEl("rqRefreshBtn");
+  btn.disabled = true; btn.textContent = "Refreshing...";
+  await rqLoadList();
+  btn.disabled = false; btn.textContent = "Refresh";
+}
+
+// refresh by itself about every 2 minutes, only while the resident is logged in, looking at the requests page
+function rqStartAuto(){
+  clearInterval(rqAutoTimer);
+  rqAutoTimer = setInterval(() => {
+    const onPage = !document.getElementById("requestSection").classList.contains("hidden");
+    if(rq.token && onPage && document.visibilityState === "visible" && Date.now() - rqLastLoad > 120000) rqLoadList();
+  }, 60000);
+}
+document.addEventListener("visibilitychange", () => {
+  if(document.visibilityState === "visible" && rq.token && Date.now() - rqLastLoad > 60000) rqLoadList();
+});
+rqStartAuto();
+
 async function rqLoadList(){
   const el = rqEl("rqList");
   try{
     const d = await callFn("resident-requests", { token: rq.token });
     if(rqGuard(d)) return;
     const rows = rq.rows = d.requests || [];
+    rqLastLoad = Date.now();
+    rqEl("rqUpdated").textContent = "Updated " + new Date().toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
     el.innerHTML = rows.length ? rows.map(r => {
       const what = r.purpose || r.details || "";
       const short = what.length > 80 ? what.slice(0, 80) + "..." : what;
@@ -1270,7 +1299,10 @@ async function rqLoadList(){
         ${r.resident_reply ? `<div class="sub" style="margin:6px 0 0;"><b>Your reply:</b> ${newsEsc(r.resident_reply)}</div>` : ""}
         ${r.status === "pending" ? `<div style="display:flex; gap:6px; margin-top:8px;">
           <button class="secondary" style="${btn}" data-id="${newsEsc(r.id)}" onclick="rqEdit(this.dataset.id)">Edit</button>
-          <button class="secondary" style="${btn}" data-id="${newsEsc(r.id)}" onclick="rqCancelReq(this.dataset.id)">Cancel request</button></div>` : ""}</div>`;
+          <button class="secondary" style="${btn}" data-id="${newsEsc(r.id)}" onclick="rqCancelReq(this.dataset.id)">Cancel request</button></div>` : ""}
+        ${(r.status === "completed" || r.status === "rejected") ? `<div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
+          <button class="secondary" style="${btn}" data-id="${newsEsc(r.id)}" onclick="rqRemoveReq(this.dataset.id)">Remove</button>
+          <span class="sub" style="margin:0; font-size:.72rem;">Finished requests are removed automatically after a few days.</span></div>` : ""}</div>`;
     }).join("") : '<p class="sub" style="margin:0;">No requests yet.</p>';
   } catch(e){ el.innerHTML = '<p class="sub" style="margin:0;">Could not load your requests.</p>'; }
 }
@@ -1309,6 +1341,15 @@ async function rqCancelReq(id){
   if(rqGuard(d)) return;
   if(!d.success){ err.textContent = d.error || "Could not cancel the request."; rqLoadList(); return; }
   if(rq.editId === id) rqCancelEdit();
+  rqLoadList();
+}
+
+async function rqRemoveReq(id){
+  if(!confirm("Remove this request from your list? This cannot be undone.")) return;
+  const err = rqEl("rqFormErr"); err.style.color = ""; err.textContent = "";
+  const d = await callFn("resident-update", { token: rq.token, action: "remove", id });
+  if(rqGuard(d)) return;
+  if(!d.success){ err.textContent = d.error || "Could not remove the request."; }
   rqLoadList();
 }
 
