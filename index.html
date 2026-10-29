@@ -1256,10 +1256,10 @@ function rqSync(){
 }
 
 const RQ_MSG = {
-  pending: "your request is pending. You can edit or cancel it until the barangay staff starts reviewing it.",
-  processing: "your request is now being reviewed by the barangay staff. It can no longer be edited or cancelled.",
-  confirmed: "your request has been confirmed by the barangay staff and is being prepared.",
-  completed: "your request is ready for pickup. Please pick it up in person."
+  pending: "your request has been received. You can edit or cancel it until it is confirmed.",
+  processing: "the barangay staff is reviewing your request. You can still edit it, reply to the staff, or cancel. When your details are correct, tap Confirm my request.",
+  confirmed: "your request is confirmed and is being prepared. It can no longer be edited or cancelled.",
+  completed: "your request has been prepared. It will be printed when you come in, so please bring a valid ID and payment if there is."
 };
 function rqRenderNotes(list){
   rqEl("rqNotes").innerHTML = (list || []).map(n => {
@@ -1311,7 +1311,8 @@ async function rqLoadList(){
         <div class="sub" style="margin:4px 0 0;">${new Date(r.created_at).toLocaleDateString()}${short ? " · " + newsEsc(short) : ""}${r.status === "rejected" && r.status_reason ? " · Reason: " + newsEsc(r.status_reason) : ""}</div>
         ${r.staff_message ? `<div class="rq-note" style="margin:8px 0 0;"><b>Message from the barangay:</b> ${newsEsc(r.staff_message)}</div>` : ""}
         ${r.resident_reply ? `<div class="sub" style="margin:6px 0 0;"><b>Your reply:</b> ${newsEsc(r.resident_reply)}</div>` : ""}
-        ${r.status === "pending" ? `<div style="display:flex; gap:6px; margin-top:8px;">
+        ${(r.status === "pending" || r.status === "processing") ? `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;">
+          ${r.status === "processing" ? `<button style="${btn}" data-id="${newsEsc(r.id)}" onclick="rqConfirmReq(this.dataset.id)">Confirm my request</button>` : ""}
           <button class="secondary" style="${btn}" data-id="${newsEsc(r.id)}" onclick="rqEdit(this.dataset.id)">Edit</button>
           <button class="secondary" style="${btn}" data-id="${newsEsc(r.id)}" onclick="rqCancelReq(this.dataset.id)">Cancel request</button></div>` : ""}
         ${(r.status === "completed" || r.status === "rejected") ? `<div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
@@ -1336,7 +1337,7 @@ function rqClearForm(){
 }
 function rqEdit(id){
   const r = (rq.rows || []).find(x => x.id === id);
-  if(!r || r.status !== "pending") return;
+  if(!r || (r.status !== "pending" && r.status !== "processing")) return;
   rq.editId = id; rq.sel = [...r.categories];
   rqRenderCats();
   const set = (i, val) => rqEl(i).value = val || "";
@@ -1354,6 +1355,16 @@ async function rqCancelReq(id){
   const d = await callFn("resident-update", { token: rq.token, action: "cancel", id });
   if(rqGuard(d)) return;
   if(!d.success){ err.textContent = d.error || "Could not cancel the request."; rqLoadList(); return; }
+  if(rq.editId === id) rqCancelEdit();
+  rqLoadList();
+}
+
+async function rqConfirmReq(id){
+  if(!confirm("Confirm that your request details are correct?\n\nAfter you confirm, you can no longer edit or cancel it.")) return;
+  const err = rqEl("rqFormErr"); err.style.color = ""; err.textContent = "";
+  const d = await callFn("resident-update", { token: rq.token, action: "confirm", id });
+  if(rqGuard(d)) return;
+  if(!d.success) err.textContent = d.error || "Could not confirm the request.";
   if(rq.editId === id) rqCancelEdit();
   rqLoadList();
 }
@@ -1399,7 +1410,7 @@ async function rqSubmit(){
     rq.editId = null; rqClearForm(); rqSetMode();
     err.style.color = "var(--accent)";
     err.textContent = editing ? "Changes saved. The barangay staff will review your updated request."
-                              : "Request submitted. Status: Pending. You can edit or cancel it until the barangay staff starts reviewing it.";
+                              : "Request submitted. Status: Pending. You can edit or cancel it until it is confirmed.";
     rqLoadList();
   } catch(e){
     err.textContent = "Could not reach the server.";
