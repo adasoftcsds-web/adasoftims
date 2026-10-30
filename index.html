@@ -173,7 +173,17 @@
   .rq-item{border-top:1px solid var(--line); padding:10px 0; font-size:.85rem;}
   .rq-item:first-child{border-top:none; padding-top:0;}
   .rq-st{display:inline-block; border-radius:10px; padding:2px 8px; font-size:.7rem; font-weight:700; color:#fff; margin-right:6px;}
-  .rq-st.pending{background:var(--warn);} .rq-st.processing{background:#2d6cdf;} .rq-st.confirmed{background:var(--accent);} .rq-st.rejected{background:var(--danger);} .rq-st.completed{background:var(--navy);}
+  .rq-st.pending{background:var(--warn);} .rq-st.processing{background:#2d6cdf;} .rq-st.confirmed{background:#0f8b8d;} .rq-st.rejected{background:var(--danger);} .rq-st.completed{background:var(--accent);}
+  .rq-item.done{background:#e6f5ec; border:2px solid var(--accent); border-radius:8px; padding:12px; margin:8px 0;}
+  .rq-guide{border-radius:6px; padding:8px 10px; margin:8px 0 0; font-size:.8rem; line-height:1.5; border-left:4px solid var(--line); background:var(--bg); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+  .rq-guide.pending{border-color:var(--warn); background:rgba(184,134,11,.10);}
+  .rq-guide.processing{border-color:#2d6cdf; background:rgba(45,108,223,.09);}
+  .rq-guide.confirmed{border-color:#0f8b8d; background:rgba(15,139,141,.10);}
+  .rq-guide.rejected{border-color:var(--danger); background:rgba(193,39,45,.08);}
+  .rq-guide.completed{border:none; background:var(--accent); color:#fff; font-size:.88rem; padding:12px;}
+  .rq-guide.completed b.big{display:block; font-size:1.15rem; letter-spacing:.4px; margin-bottom:4px;}
+  .rq-note.done{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .rq-note.done span{color:#e6f5ec !important;}
   /* Mini games */
   .gm-wrap{position:relative; max-width:320px; margin:0 auto;}
   #gmCv{width:100%; height:auto; display:block; border-radius:8px; border:2px solid var(--navy); touch-action:manipulation;}
@@ -1256,19 +1266,33 @@ function rqSync(){
 }
 
 const RQ_MSG = {
-  pending: "your request has been received. You can edit or cancel it until it is confirmed.",
-  processing: "the barangay staff is reviewing your request. You can still edit it, reply to the staff, or cancel. When your details are correct, tap Confirm my request.",
-  confirmed: "your request is confirmed and is being prepared. It can no longer be edited or cancelled.",
-  completed: "your request has been prepared. It will be printed when you come in, so please bring a valid ID and payment if there is."
+  pending: "we received your request. You can still change or cancel it.",
+  processing: "the barangay is checking your request. You can still edit it or reply. When your details are correct, tap Confirm my request.",
+  confirmed: "your request is confirmed. The barangay is preparing your document. You do not need to do anything now.",
+  completed: "your request is READY. Please go to the barangay hall and bring your valid ID and payment if there is. It will be printed when you arrive."
 };
 function rqRenderNotes(list){
   rqEl("rqNotes").innerHTML = (list || []).map(n => {
+    const ready = n.status === "completed";
     const msg = n.status === "rejected"
-      ? "your request was rejected." + (n.status_reason ? " Reason: " + n.status_reason : "")
+      ? "your request was not approved." + (n.status_reason ? " Reason: " + n.status_reason : "")
       : (RQ_MSG[n.status] || RQ_MSG.pending);
     const extra = n.staff_message ? `<br><b>Message from the barangay:</b> ${newsEsc(n.staff_message)}` : "";
-    return `<div class="rq-note"><b>Hello ${newsEsc(rq.name)}</b>, ${newsEsc(msg)}${extra}<br><span style="color:var(--muted);">${newsEsc(rqCatNames(n.categories))}</span></div>`;
+    const head = ready ? `<b style="font-size:1.05rem; letter-spacing:.3px;">READY FOR PICKUP</b><br>` : "";
+    return `<div class="rq-note${ready ? " done" : ""}">${head}<b>Hello ${newsEsc(rq.name)}</b>, ${newsEsc(msg)}${extra}<br><span style="color:var(--muted);">${newsEsc(rqCatNames(n.categories))}</span></div>`;
   }).join("");
+}
+
+const RQ_LABEL = { pending: "Received", processing: "Being reviewed", confirmed: "Confirmed", completed: "READY FOR PICKUP", rejected: "Not approved" };
+function rqGuide(r){
+  switch(r.status){
+    case "pending": return `<div class="rq-guide pending">We received your request. You can still change or cancel it.</div>`;
+    case "processing": return `<div class="rq-guide processing">The barangay is checking your request. Read the message below if there is one. When your details are correct, tap <b>Confirm my request</b>.</div>`;
+    case "confirmed": return `<div class="rq-guide confirmed">Confirmed. The barangay is preparing your document. You do not need to do anything now.</div>`;
+    case "completed": return `<div class="rq-guide completed"><b class="big">READY FOR PICKUP</b>Please go to the barangay hall. Bring your valid ID and payment if there is. Your document will be printed when you arrive.</div>`;
+    case "rejected": return `<div class="rq-guide rejected"><b>Not approved.</b>${r.status_reason ? " Reason: " + newsEsc(r.status_reason) : ""} Please visit the barangay office if you have questions.</div>`;
+    default: return "";
+  }
 }
 
 let rqLastLoad = 0, rqAutoTimer = null;
@@ -1306,9 +1330,10 @@ async function rqLoadList(){
       const what = r.purpose || r.details || "";
       const short = what.length > 80 ? what.slice(0, 80) + "..." : what;
       const btn = "width:auto; margin:0; padding:7px 12px; font-size:.78rem;";
-      return `<div class="rq-item">
-        <span class="rq-st ${newsEsc(r.status)}">${newsEsc(String(r.status).toUpperCase())}</span><b>${newsEsc(rqCatNames(r.categories))}</b>
-        <div class="sub" style="margin:4px 0 0;">${new Date(r.created_at).toLocaleDateString()}${short ? " · " + newsEsc(short) : ""}${r.status === "rejected" && r.status_reason ? " · Reason: " + newsEsc(r.status_reason) : ""}</div>
+      return `<div class="rq-item${r.status === "completed" ? " done" : ""}">
+        <span class="rq-st ${newsEsc(r.status)}">${newsEsc(RQ_LABEL[r.status] || String(r.status).toUpperCase())}</span><b>${newsEsc(rqCatNames(r.categories))}</b>
+        <div class="sub" style="margin:4px 0 0;">${new Date(r.created_at).toLocaleDateString()}${short ? " · " + newsEsc(short) : ""}""</div>
+        ${rqGuide(r)}
         ${r.staff_message ? `<div class="rq-note" style="margin:8px 0 0;"><b>Message from the barangay:</b> ${newsEsc(r.staff_message)}</div>` : ""}
         ${r.resident_reply ? `<div class="sub" style="margin:6px 0 0;"><b>Your reply:</b> ${newsEsc(r.resident_reply)}</div>` : ""}
         ${(r.status === "pending" || r.status === "processing") ? `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;">
@@ -1316,7 +1341,7 @@ async function rqLoadList(){
           <button class="secondary" style="${btn}" data-id="${newsEsc(r.id)}" onclick="rqEdit(this.dataset.id)">Edit</button>
           <button class="secondary" style="${btn}" data-id="${newsEsc(r.id)}" onclick="rqCancelReq(this.dataset.id)">Cancel request</button></div>` : ""}
         ${(r.status === "completed" || r.status === "rejected") ? `<div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
-          <button class="secondary" style="${btn}" data-id="${newsEsc(r.id)}" onclick="rqRemoveReq(this.dataset.id)">Remove</button>
+          <button class="secondary" style="${btn}" data-id="${newsEsc(r.id)}" onclick="rqRemoveReq(this.dataset.id)">Remove from my list</button>
           <span class="sub" style="margin:0; font-size:.72rem;">Finished requests are removed automatically after a few days.</span></div>` : ""}</div>`;
     }).join("") : '<p class="sub" style="margin:0;">No requests yet.</p>';
   } catch(e){ el.innerHTML = '<p class="sub" style="margin:0;">Could not load your requests.</p>'; }
